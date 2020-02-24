@@ -129,11 +129,39 @@ function RTBHouseHtb(configs) {
          */
 
         /* ---------------------- PUT CODE HERE ------------------------------------ */
-        var queryObj = {};
         var callbackId = System.generateUniqueId();
+        var queryObj = {
+            id: callbackId,
+            imp: [],
+            site: {
+                publisher: {
+                    id: configs.publisherId
+                },
+                page: Browser.getPathname(),
+                name: Browser.getHostname()
+            },
+            cur: ['USD'],
+            test: 0,
+            regs: {
+                ext: {
+                }
+            },
+            user: {
+                ext: {
+                }
+            }
+        };
 
         /* Change this to your bidder endpoint. */
-        var baseUrl = Browser.getProtocol() + '//someAdapterEndpoint.com/bid';
+        var REGION_PREFIX_TRANSLATION = {
+            'ixwrapper-eu': 'eu',
+            'ixwrapper-us': 'us',
+            'ixwrapper-sin': 'c2s-sin'
+        };
+        var ENDPOINT_URL = 'ixwrapper-'
+            + REGION_PREFIX_TRANSLATION[configs.region]
+            + '.creativecdn.com/bidder/ixwrapper/bids';
+        var baseUrl = 'https://' + ENDPOINT_URL;
 
         /* ------------------------ Get consent information -------------------------
          * If you want to implement GDPR consent in your adapter, use the function
@@ -163,15 +191,42 @@ function RTBHouseHtb(configs) {
         var privacyEnabled = ComplianceService.isPrivacyEnabled();
 
         /* ---------------- Craft bid request using the above returnParcels --------- */
+        for (var i = 0; i < returnParcels.length; i++) {
+            var xSlotRef = returnParcels[i].xSlotRef;
+            var placementId = String(xSlotRef.placementId);
+            var slotWidth = xSlotRef.size[0];
+            var slotHeight = xSlotRef.size[1];
+            var slotData = {
+                id: placementId,
+                banner: {
+                    w: slotWidth,
+                    h: slotHeight,
+                    format: [
+                        {
+                            w: slotWidth,
+                            h: slotHeight
+                        }
+                    ]
+                }
+            };
+            queryObj.imp.push(slotData);
+        }
 
         /* ------- Put GDPR consent code here if you are implementing GDPR ---------- */
+        if (privacyEnabled) {
+            queryObj.user.ext.consent = gdprStatus.consentString;
+            queryObj.regs.ext.gdpr = gdprStatus.applies ? 0 : 1;
+        }
 
         /* -------------------------------------------------------------------------- */
-
         return {
             url: baseUrl,
             data: queryObj,
-            callbackId: callbackId
+            callbackId: callbackId,
+            networkParamOverrides: {
+                method: 'POST',
+                contentType: 'text/plain'
+            }
         };
     }
 
@@ -274,7 +329,7 @@ function RTBHouseHtb(configs) {
                  */
 
                 /* ----------- Fill this out to find a matching bid for the current parcel ------------- */
-                if (curReturnParcel.xSlotRef.someCriteria === bids[i].someCriteria) {
+                if (String(curReturnParcel.xSlotRef.placementId) === bids[i].id) {
                     curBid = bids[i];
                     bids.splice(i, 1);
 
@@ -301,7 +356,7 @@ function RTBHouseHtb(configs) {
             var bidPrice = curBid.price;
 
             /* The size of the given slot */
-            var bidSize = [Number(curBid.width), Number(curBid.height)];
+            var bidSize = [Number(curBid.w), Number(curBid.h)];
 
             /* The creative/adm for the given slot that will be rendered if is the winner.
              * Please make sure the URL is decoded and ready to be document.written.
@@ -348,7 +403,6 @@ function RTBHouseHtb(configs) {
             //? if (FEATURES.GPT_LINE_ITEMS) {
             targetingCpm = __baseClass._bidTransformers.targeting.apply(bidPrice);
             var sizeKey = Size.arrayToString(curReturnParcel.size);
-
             if (bidDealId) {
                 curReturnParcel.targeting[__baseClass._configs.targetingKeys.pmid] = [sizeKey + '_' + bidDealId];
                 curReturnParcel.targeting[__baseClass._configs.targetingKeys.pm] = [sizeKey + '_' + targetingCpm];
@@ -421,7 +475,7 @@ function RTBHouseHtb(configs) {
             features: {
                 demandExpiry: {
                     enabled: true,
-                    value: 55
+                    value: 55000
                 },
                 rateLimiting: {
                     enabled: false,
@@ -441,7 +495,7 @@ function RTBHouseHtb(configs) {
             bidUnitInCents: 100,
             lineItemType: Constants.LineItemTypes.ID_AND_SIZE,
             callbackType: Partner.CallbackTypes.NONE,
-            architecture: Partner.Architectures.MRA,
+            architecture: Partner.Architectures.SRA,
             requestType: Partner.RequestTypes.AJAX
         };
 
